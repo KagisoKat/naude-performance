@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: naude-db
+
+    environment:
+      POSTGRES_DB: naude
+      POSTGRES_USER: naude_user
+      POSTGRES_PASSWORD: naude_dev_password
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naude_user -d naude"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: naude-backend
+
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: naude
+      DB_USER: naude_user
+      DB_PASSWORD: naude_dev_password
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
