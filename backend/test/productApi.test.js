@@ -9,6 +9,23 @@ import pool from "../src/config/db.js";
 describe("NAUDÉ Product API", function () {
   const createdProductIds = [];
 
+  before(async function () {
+    if (process.env.DB_NAME !== "naude_test") {
+      throw new Error(
+        "Product API tests must run against naude_test"
+      );
+    }
+
+    const result = await pool.query(
+      "SELECT current_database() AS database_name"
+    );
+
+    assert.equal(
+      result.rows[0].database_name,
+      "naude_test",
+      "Connected to the wrong database"
+    );
+  });
   // Create a temporary product for testing.
   async function createTestProduct(status = "active") {
     const slug = `test-product-${randomUUID()}`;
