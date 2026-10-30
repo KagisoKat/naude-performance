@@ -8,7 +8,8 @@
 		"start": "node src/server.js",
 		"dev": "node --watch src/server.js",
 		"migrate": "node db/migrate.js",
-		"test:db": "mocha test/database.test.js --exit"
+		"test:db": "mocha test/database.test.js --exit",
+		"test:api": "mocha test/productApi.test.js --exit"
 	},
 	"keywords": [],
 	"author": "",
