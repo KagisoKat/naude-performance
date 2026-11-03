@@ -4,6 +4,7 @@ import helmet from "helmet";
 import cors from "cors";
 
 import productRoutes from "./routes/productRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
 const app = express();
 
@@ -15,7 +16,8 @@ app.use(
     })
 );
 
-app.use(express.json());
+// Limit the size of incoming JSON request bodies.
+app.use(express.json({ limit: "16kb" }));
 
 app.get("/api/health", (req, res) => {
     res.status(200).json({
@@ -24,8 +26,13 @@ app.get("/api/health", (req, res) => {
     });
 });
 
+// Product endpoints
 app.use("/api/products", productRoutes);
 
+// Authentication endpoints
+app.use("/api/auth", authRoutes);
+
+// Unknown routes
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -33,8 +40,23 @@ app.use((req, res) => {
     });
 });
 
+// Central error handler
 app.use((error, req, res, next) => {
     console.error(error);
+
+    if (error.status === 400 && error.type === "entity.parse.failed") {
+        return res.status(400).json({
+            success: false,
+            message: "Invalid JSON request body"
+        });
+    }
+
+    if (error.status === 413) {
+        return res.status(413).json({
+            success: false,
+            message: "Request body is too large"
+        });
+    }
 
     res.status(500).json({
         success: false,

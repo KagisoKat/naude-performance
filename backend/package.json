@@ -9,12 +9,14 @@
 		"dev": "node --watch src/server.js",
 		"migrate": "node db/migrate.js",
 		"test:db": "mocha test/database.test.js --exit",
-		"test:api": "mocha test/productApi.test.js --exit"
+		"test:api": "mocha test/productApi.test.js --exit",
+		"test:auth": "mocha test/authApi.test.js --exit"
 	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
+		"argon2": "^0.45.1",
 		"cors": "^2.8.6",
 		"express": "^5.2.1",
 		"helmet": "^8.3.0",
