@@ -57,3 +57,64 @@ export async function registerUser(userData) {
   }
 }
 
+export async function authenticateUser(email, password) {
+  const result = await pool.query(
+    `
+      SELECT
+        id,
+        first_name,
+        last_name,
+        email,
+        role,
+        is_active,
+        password_hash
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
+    `,
+    [email]
+  );
+
+  const user = result.rows[0];
+
+  if (!user || !user.is_active) {
+    return null;
+  }
+
+  const validPassword = await argon2.verify(
+    user.password_hash,
+    password
+  );
+
+  if (!validPassword) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    role: user.role
+  };
+}
+
+export async function findActiveUserById(userId) {
+  const result = await pool.query(
+    `
+      SELECT
+        id,
+        first_name,
+        last_name,
+        email,
+        role
+      FROM users
+      WHERE id = $1
+        AND is_active = true
+    `,
+    [userId]
+  );
+
+  return result.rows[0] ?? null;
+}
+

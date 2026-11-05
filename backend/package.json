@@ -10,15 +10,18 @@
 		"migrate": "node db/migrate.js",
 		"test:db": "mocha test/database.test.js --exit",
 		"test:api": "mocha test/productApi.test.js --exit",
-		"test:auth": "mocha test/authApi.test.js --exit"
+		"test:auth": "mocha test/authApi.test.js --exit",
+		"test:login": "mocha test/loginApi.test.js --exit"
 	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
 		"argon2": "^0.45.1",
+		"connect-pg-simple": "^10.0.0",
 		"cors": "^2.8.6",
 		"express": "^5.2.1",
+		"express-session": "^1.19.0",
 		"helmet": "^8.3.0",
 		"pg": "^8.23.1",
 		"zod": "^4.6.5"

@@ -2,7 +2,7 @@
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-
+import { createSessionMiddleware } from "./config/session.js";
 import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 
@@ -10,15 +10,14 @@ const app = express();
 
 app.use(helmet());
 
-app.use(
-    cors({
-        origin: "http://192.168.56.10:5173"
-    })
-);
+app.use(cors({
+    origin: "http://192.168.56.10:5173",
+    credentials: true
+}));
 
 // Limit the size of incoming JSON request bodies.
 app.use(express.json({ limit: "16kb" }));
-
+app.use(createSessionMiddleware());
 app.get("/api/health", (req, res) => {
     res.status(200).json({
         status: "success",

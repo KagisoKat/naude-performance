@@ -25,3 +25,12 @@ export const registerSchema = z.strictObject({
     .max(128, "Password is too long")
 });
 
+
+export const loginSchema = z.strictObject({
+  email: z.email()
+    .max(255)
+    .transform((email) => email.toLowerCase()),
+
+  password: z.string().min(1)
+});
+
