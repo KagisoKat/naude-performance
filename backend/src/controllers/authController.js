@@ -1,4 +1,4 @@
-
+import { generateCsrfToken } from "../middleware/csrfProtection.js";
 import { registerSchema } from "../validators/authSchemas.js";
 import { registerUser } from "../services/authService.js";
 import { loginSchema } from "../validators/authSchemas.js";
@@ -91,6 +91,25 @@ export function getCurrentUser(req, res) {
     success: true,
     data: req.user
   });
+}
+
+export function getCsrfToken(req, res, next) {
+  try {
+    const csrfToken = generateCsrfToken(req);
+
+    req.session.save((error) => {
+      if (error) {
+        return next(error);
+      }
+
+      return res.status(200).json({
+        success: true,
+        csrfToken
+      });
+    });
+  } catch (error) {
+    next(error);
+  }
 }
 
 export function logout(req, res, next) {
