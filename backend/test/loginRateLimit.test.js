@@ -6,6 +6,10 @@ import request from "supertest";
 import app from "../src/app.js";
 import pool from "../src/config/db.js";
 
+const ORIGIN =
+  process.env.FRONTEND_ORIGIN ??
+  "http://192.168.56.10:5173";
+
 describe("NAUDÉ Login Rate Limiting", function () {
   this.timeout(15000);
 
@@ -36,16 +40,24 @@ describe("NAUDÉ Login Rate Limiting", function () {
       password: "IncorrectPassword123!"
     };
 
+    // First five attempts should fail authentication.
     for (let attempt = 1; attempt <= 5; attempt++) {
       const response = await request(app)
         .post("/api/auth/login")
+        .set("Origin", ORIGIN)
         .send(credentials);
 
-      assert.equal(response.status, 401);
+      assert.equal(
+        response.status,
+        401,
+        `Attempt ${attempt}: expected 401, received ${response.status}`
+      );
     }
 
+    // Sixth attempt should be blocked by the rate limiter.
     const blockedResponse = await request(app)
       .post("/api/auth/login")
+      .set("Origin", ORIGIN)
       .send(credentials);
 
     assert.equal(blockedResponse.status, 429);
@@ -60,4 +72,3 @@ describe("NAUDÉ Login Rate Limiting", function () {
     );
   });
 });
-

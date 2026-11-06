@@ -37,6 +37,7 @@ services:
       DB_USER: naude_user
       DB_PASSWORD: naude_dev_password
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      FRONTEND_ORIGIN: http://192.168.56.10:5173
 
     ports:
       - "5000:5000"

@@ -5,7 +5,9 @@ import cors from "cors";
 import { createSessionMiddleware } from "./config/session.js";
 import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
-
+import {
+    requireTrustedOrigin
+} from "./middleware/requireTrustedOrigin.js";
 const app = express();
 
 app.use(helmet());
@@ -24,7 +26,11 @@ app.get("/api/health", (req, res) => {
         message: "NAUDÉ API is running"
     });
 });
+app.use(express.json({ limit: "10kb" }));
 
+app.use(createSessionMiddleware());
+
+app.use(requireTrustedOrigin);
 // Product endpoints
 app.use("/api/products", productRoutes);
 

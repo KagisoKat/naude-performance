@@ -12,7 +12,8 @@
 		"test:api": "mocha test/productApi.test.js --exit",
 		"test:auth": "mocha test/authApi.test.js --exit",
 		"test:login": "mocha test/loginApi.test.js --exit",
-		"test:rate-limit": "mocha test/loginRateLimit.test.js --exit"
+		"test:rate-limit": "mocha test/loginRateLimit.test.js --exit",
+		"test:csrf": "mocha test/csrfApi.test.js --exit"
 	},
 	"keywords": [],
 	"author": "",

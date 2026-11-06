@@ -5,6 +5,9 @@ import { loginSchema } from "../validators/authSchemas.js";
 import {
   authenticateUser
 } from "../services/authService.js";
+import {
+  generateCsrfToken
+} from "../middleware/csrfProtection.js";
 export async function register(req, res, next) {
   try {
     const validation = registerSchema.safeParse(req.body);
@@ -35,6 +38,26 @@ export async function register(req, res, next) {
       });
     }
 
+    next(error);
+  }
+}
+
+
+export function getCsrfToken(req, res, next) {
+  try {
+    const token = generateCsrfToken(req);
+
+    req.session.save((error) => {
+      if (error) {
+        return next(error);
+      }
+
+      return res.status(200).json({
+        success: true,
+        csrfToken: token
+      });
+    });
+  } catch (error) {
     next(error);
   }
 }
