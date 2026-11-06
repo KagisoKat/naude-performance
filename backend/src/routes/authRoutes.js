@@ -10,11 +10,13 @@ import {
 
 import { requireAuth } from "../middleware/requireAuth.js";
 
+import { loginRateLimiter } from "../middleware/loginRateLimiter.js";
+
 const router = Router();
 
 router.post("/register", register);
 
-router.post("/login", login);
+router.post("/login", loginRateLimiter, login);
 
 router.get("/me", requireAuth, getCurrentUser);
 

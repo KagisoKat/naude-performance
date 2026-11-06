@@ -11,7 +11,8 @@
 		"test:db": "mocha test/database.test.js --exit",
 		"test:api": "mocha test/productApi.test.js --exit",
 		"test:auth": "mocha test/authApi.test.js --exit",
-		"test:login": "mocha test/loginApi.test.js --exit"
+		"test:login": "mocha test/loginApi.test.js --exit",
+		"test:rate-limit": "mocha test/loginRateLimit.test.js --exit"
 	},
 	"keywords": [],
 	"author": "",
@@ -21,6 +22,7 @@
 		"connect-pg-simple": "^10.0.0",
 		"cors": "^2.8.6",
 		"express": "^5.2.1",
+		"express-rate-limit": "^8.7.3",
 		"express-session": "^1.19.0",
 		"helmet": "^8.3.0",
 		"pg": "^8.23.1",
