@@ -7,11 +7,14 @@ import request from "supertest";
 import app from "../src/app.js";
 import pool from "../src/config/db.js";
 
+const ORIGIN =
+  process.env.FRONTEND_ORIGIN ??
+  "http://192.168.56.10:5173";
+
 describe("NAUDÉ Login and Session API", function () {
-  this.timeout(10000);
+  this.timeout(15000);
 
   const createdUserIds = new Set();
-  const agents = [];
 
   async function createTestUser(options = {}) {
     const password = "SecureTestPassword123!";
@@ -55,9 +58,45 @@ describe("NAUDÉ Login and Session API", function () {
   }
 
   function createAgent() {
-    const agent = request.agent(app);
-    agents.push(agent);
-    return agent;
+    return request.agent(app);
+  }
+
+  // Return the Supertest request directly so callers
+  // can chain .expect() before awaiting.
+  function loginUser(agent, user) {
+    return agent
+      .post("/api/auth/login")
+      .set("Origin", ORIGIN)
+      .send({
+        email: user.email,
+        password: user.password
+      });
+  }
+
+  async function getCsrfToken(agent) {
+    const response = await agent
+      .get("/api/auth/csrf-token")
+      .expect(200);
+
+    assert.equal(response.body.success, true);
+
+    assert.match(
+      response.body.csrfToken,
+      /^[a-f0-9]{64}$/
+    );
+
+    return response.body.csrfToken;
+  }
+
+  // Logout is asynchronous because we must first
+  // retrieve the CSRF token for the current session.
+  async function logoutUser(agent) {
+    const csrfToken = await getCsrfToken(agent);
+
+    return agent
+      .post("/api/auth/logout")
+      .set("Origin", ORIGIN)
+      .set("X-CSRF-Token", csrfToken);
   }
 
   before(async function () {
@@ -78,11 +117,13 @@ describe("NAUDÉ Login and Session API", function () {
   });
 
   afterEach(async function () {
-    // Remove sessions created by the current test.
-    // Test sessions contain a userId in the JSON data.
     const ids = [...createdUserIds];
 
-    if (ids.length > 0) {
+    if (ids.length === 0) {
+      return;
+    }
+
+    try {
       await pool.query(
         `
           DELETE FROM user_sessions
@@ -98,10 +139,12 @@ describe("NAUDÉ Login and Session API", function () {
         `,
         [ids]
       );
-    }
 
-    createdUserIds.clear();
-    agents.length = 0;
+      createdUserIds.clear();
+    } catch (error) {
+      console.error("Test cleanup failed:", error);
+      throw error;
+    }
   });
 
   after(async function () {
@@ -112,12 +155,7 @@ describe("NAUDÉ Login and Session API", function () {
     const user = await createTestUser();
     const agent = createAgent();
 
-    const response = await agent
-      .post("/api/auth/login")
-      .send({
-        email: user.email,
-        password: user.password
-      });
+    const response = await loginUser(agent, user);
 
     assert.equal(response.status, 200);
     assert.equal(response.body.success, true);
@@ -126,6 +164,7 @@ describe("NAUDÉ Login and Session API", function () {
     const cookies = response.headers["set-cookie"];
 
     assert.ok(cookies);
+
     assert.ok(
       cookies.some((cookie) =>
         cookie.startsWith("naude.sid=")
@@ -138,6 +177,7 @@ describe("NAUDÉ Login and Session API", function () {
 
     const response = await request(app)
       .post("/api/auth/login")
+      .set("Origin", ORIGIN)
       .send({
         email: user.email,
         password: "IncorrectPassword123!"
@@ -150,6 +190,7 @@ describe("NAUDÉ Login and Session API", function () {
   it("rejects an unknown email", async function () {
     const response = await request(app)
       .post("/api/auth/login")
+      .set("Origin", ORIGIN)
       .send({
         email: `unknown-${randomUUID()}@example.com`,
         password: "SecureTestPassword123!"
@@ -162,13 +203,7 @@ describe("NAUDÉ Login and Session API", function () {
     const user = await createTestUser();
     const agent = createAgent();
 
-    await agent
-      .post("/api/auth/login")
-      .send({
-        email: user.email,
-        password: user.password
-      })
-      .expect(200);
+    await loginUser(agent, user).expect(200);
 
     const response = await agent
       .get("/api/auth/me");
@@ -195,13 +230,7 @@ describe("NAUDÉ Login and Session API", function () {
     const user = await createTestUser();
     const agent = createAgent();
 
-    await agent
-      .post("/api/auth/login")
-      .send({
-        email: user.email,
-        password: user.password
-      })
-      .expect(200);
+    await loginUser(agent, user).expect(200);
 
     const firstResponse = await agent
       .get("/api/auth/me");
@@ -222,41 +251,43 @@ describe("NAUDÉ Login and Session API", function () {
     const user = await createTestUser();
     const agent = createAgent();
 
-    await agent
-      .post("/api/auth/login")
-      .send({
-        email: user.email,
-        password: user.password
-      })
-      .expect(200);
+    await loginUser(agent, user).expect(200);
 
-    const response = await agent
-      .post("/api/auth/logout");
+    const response = await logoutUser(agent);
 
-    assert.equal(response.status, 200);
+    assert.equal(
+      response.status,
+      200,
+      JSON.stringify(response.body)
+    );
+
     assert.equal(response.body.success, true);
+
+    assert.equal(
+      response.body.message,
+      "Logout successful"
+    );
   });
 
   it("denies protected access after logout", async function () {
     const user = await createTestUser();
     const agent = createAgent();
 
-    await agent
-      .post("/api/auth/login")
-      .send({
-        email: user.email,
-        password: user.password
-      })
-      .expect(200);
+    await loginUser(agent, user).expect(200);
 
-    await agent
-      .post("/api/auth/logout")
-      .expect(200);
+    const logoutResponse = await logoutUser(agent);
+
+    assert.equal(
+      logoutResponse.status,
+      200,
+      JSON.stringify(logoutResponse.body)
+    );
 
     const response = await agent
       .get("/api/auth/me");
 
     assert.equal(response.status, 401);
+    assert.equal(response.body.success, false);
   });
 
   it("rejects login for deactivated accounts", async function () {
@@ -266,6 +297,7 @@ describe("NAUDÉ Login and Session API", function () {
 
     const response = await request(app)
       .post("/api/auth/login")
+      .set("Origin", ORIGIN)
       .send({
         email: user.email,
         password: user.password
@@ -278,13 +310,7 @@ describe("NAUDÉ Login and Session API", function () {
     const user = await createTestUser();
     const agent = createAgent();
 
-    await agent
-      .post("/api/auth/login")
-      .send({
-        email: user.email,
-        password: user.password
-      })
-      .expect(200);
+    await loginUser(agent, user).expect(200);
 
     await pool.query(
       `
@@ -301,4 +327,3 @@ describe("NAUDÉ Login and Session API", function () {
     assert.equal(response.status, 401);
   });
 });
-

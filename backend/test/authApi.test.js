@@ -7,7 +7,14 @@ import request from "supertest";
 import app from "../src/app.js";
 import pool from "../src/config/db.js";
 
+// Trusted frontend origin for authentication requests.
+const ORIGIN =
+  process.env.FRONTEND_ORIGIN ??
+  "http://192.168.56.10:5173";
+
 describe("NAUDÉ Authentication API", function () {
+  this.timeout(15000);
+
   const testEmails = new Set();
 
   function createTestUser(overrides = {}) {
@@ -68,6 +75,7 @@ describe("NAUDÉ Authentication API", function () {
 
     const response = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send(user);
 
     assert.equal(response.status, 201);
@@ -91,6 +99,7 @@ describe("NAUDÉ Authentication API", function () {
 
     const response = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send(user);
 
     assert.equal(response.status, 201);
@@ -125,6 +134,7 @@ describe("NAUDÉ Authentication API", function () {
 
     const response = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send(user);
 
     assert.equal(response.status, 201);
@@ -145,12 +155,14 @@ describe("NAUDÉ Authentication API", function () {
 
     const firstResponse = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send(user);
 
     assert.equal(firstResponse.status, 201);
 
     const secondResponse = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send({
         ...user,
         email: user.email.toUpperCase()
@@ -167,6 +179,7 @@ describe("NAUDÉ Authentication API", function () {
 
     const response = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send(user);
 
     assert.equal(response.status, 400);
@@ -180,6 +193,7 @@ describe("NAUDÉ Authentication API", function () {
 
     const response = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send(user);
 
     assert.equal(response.status, 400);
@@ -193,6 +207,7 @@ describe("NAUDÉ Authentication API", function () {
 
     const response = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send(user);
 
     assert.equal(response.status, 400);
@@ -202,6 +217,7 @@ describe("NAUDÉ Authentication API", function () {
   it("rejects missing required fields", async function () {
     const response = await request(app)
       .post("/api/auth/register")
+      .set("Origin", ORIGIN)
       .send({
         first_name: "Test"
       });
@@ -210,4 +226,3 @@ describe("NAUDÉ Authentication API", function () {
     assert.equal(response.body.success, false);
   });
 });
-

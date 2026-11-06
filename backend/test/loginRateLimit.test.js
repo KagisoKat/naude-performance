@@ -6,6 +6,11 @@ import request from "supertest";
 import app from "../src/app.js";
 import pool from "../src/config/db.js";
 
+// Trusted frontend origin configured for NAUDÉ.
+const ORIGIN =
+  process.env.FRONTEND_ORIGIN ??
+  "http://192.168.56.10:5173";
+
 describe("NAUDÉ Login Rate Limiting", function () {
   this.timeout(15000);
 
@@ -36,16 +41,20 @@ describe("NAUDÉ Login Rate Limiting", function () {
       password: "IncorrectPassword123!"
     };
 
+    // First five failed attempts should return 401.
     for (let attempt = 1; attempt <= 5; attempt++) {
       const response = await request(app)
         .post("/api/auth/login")
+        .set("Origin", ORIGIN)
         .send(credentials);
 
       assert.equal(response.status, 401);
     }
 
+    // Sixth failed attempt should be blocked.
     const blockedResponse = await request(app)
       .post("/api/auth/login")
+      .set("Origin", ORIGIN)
       .send(credentials);
 
     assert.equal(blockedResponse.status, 429);
@@ -60,4 +69,3 @@ describe("NAUDÉ Login Rate Limiting", function () {
     );
   });
 });
-
