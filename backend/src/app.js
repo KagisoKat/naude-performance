@@ -5,6 +5,7 @@ import cors from "cors";
 import { createSessionMiddleware } from "./config/session.js";
 import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
 import { requireTrustedOrigin } from "./middleware/requireTrustedOrigin.js";
 const app = express();
 
@@ -30,7 +31,8 @@ app.use("/api/products", productRoutes);
 
 // Authentication endpoints
 app.use("/api/auth", authRoutes);
-
+// Shopping cart endpoints
+app.use("/api/cart", cartRoutes);
 // Unknown routes
 app.use((req, res) => {
     res.status(404).json({
