@@ -180,4 +180,109 @@ describe("NAUDÉ Cart API", function () {
     assert.equal(basePriceItem.availableStock, 0);
     assert.equal(basePriceItem.isAvailable, false);
   });
+
+  it("requires authentication before adding an item", async function () {
+    await request(app)
+      .post("/api/cart/items")
+      .set("Origin", origin)
+      .send({ variantId: randomUUID(), quantity: 1 })
+      .expect(401);
+  });
+
+  it("requires a CSRF token and validates the quantity", async function () {
+    const customer = await createCustomer();
+    const agent = await login(customer);
+
+    await agent.post("/api/cart/items")
+      .set("Origin", origin)
+      .send({ variantId: randomUUID(), quantity: 1 })
+      .expect(403);
+
+    const tokenResponse = await agent.get("/api/auth/csrf-token")
+      .expect(200);
+
+    await agent.post("/api/cart/items")
+      .set("Origin", origin)
+      .set("X-CSRF-Token", tokenResponse.body.csrfToken)
+      .send({ variantId: randomUUID(), quantity: "2" })
+      .expect(400);
+  });
+
+  it("adds to an existing quantity and preserves it when stock is insufficient", async function () {
+    const customer = await createCustomer();
+    const agent = await login(customer);
+    const tokenResponse = await agent.get("/api/auth/csrf-token")
+      .expect(200);
+    const csrfToken = tokenResponse.body.csrfToken;
+
+    const { rows: [product] } = await pool.query(
+      `INSERT INTO products (name, slug, category, base_price, status)
+       VALUES ('Test Leggings', $1, 'leggings', 19.99, 'active')
+       RETURNING id`,
+      [`test-cart-add-${randomUUID()}`]
+    );
+    productIds.push(product.id);
+
+    const { rows: [variant] } = await pool.query(
+      `INSERT INTO product_variants (product_id, sku, color, size)
+       VALUES ($1, $2, 'Black', 'M')
+       RETURNING id`,
+      [product.id, `TEST-${randomUUID()}`]
+    );
+
+    await pool.query(
+      `INSERT INTO inventory (variant_id, quantity_on_hand, quantity_reserved)
+       VALUES ($1, 5, 1)`,
+      [variant.id]
+    );
+
+    function addQuantity(quantity) {
+      return agent.post("/api/cart/items")
+        .set("Origin", origin)
+        .set("X-CSRF-Token", csrfToken)
+        .send({ variantId: variant.id, quantity });
+    }
+
+    const firstAdd = await addQuantity(2).expect(200);
+    assert.equal(firstAdd.body.item.variantId, variant.id);
+    assert.equal(firstAdd.body.item.quantity, 2);
+
+       const responses = await Promise.all([
+      addQuantity(2),
+      addQuantity(2)
+    ]);
+
+    assert.deepEqual(
+      responses.map((response) => response.status).sort((a, b) => a - b),
+      [200, 409]
+    );
+
+    const acceptedAdd = responses.find((response) => response.status === 200);
+    const rejectedAdd = responses.find((response) => response.status === 409);
+
+    assert.equal(acceptedAdd.body.item.id, firstAdd.body.item.id);
+    assert.equal(acceptedAdd.body.item.quantity, 4);
+    assert.equal(rejectedAdd.body.availableStock, 4);
+
+    const { body } = await agent.get("/api/cart").expect(200);
+    assert.equal(body.cart.items.length, 1);
+    assert.equal(body.cart.items[0].quantity, 4);
+    assert.equal(body.cart.subtotal, "79.96");
+  });
+    it("leaves no cart behind when the first add targets a missing variant", async function () {
+    const customer = await createCustomer();
+    const agent = await login(customer);
+    const { body } = await agent.get("/api/auth/csrf-token").expect(200);
+
+    await agent.post("/api/cart/items")
+      .set("Origin", origin)
+      .set("X-CSRF-Token", body.csrfToken)
+      .send({ variantId: randomUUID(), quantity: 1 })
+      .expect(404);
+
+    await agent.get("/api/cart").expect(200, {
+      success: true,
+      cart: { id: null, items: [], itemCount: 0, subtotal: "0.00" }
+    });
+  });
 });

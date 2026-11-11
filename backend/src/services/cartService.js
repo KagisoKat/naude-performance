@@ -104,3 +104,92 @@ export async function getCartByUserId(userId) {
     subtotal: totalsResult.rows[0].subtotal
   };
 }
+
+export async function addCartItem(userId, variantId, quantity) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // Create the customer's cart on their first successful add.
+    await client.query(
+      `
+        INSERT INTO carts (user_id)
+        VALUES ($1)
+        ON CONFLICT (user_id) DO NOTHING
+      `,
+      [userId]
+    );
+
+    // Make concurrent requests for this cart take turns.
+    const cartResult = await client.query(
+      `
+        SELECT id
+        FROM carts
+        WHERE user_id = $1
+        FOR UPDATE
+      `,
+      [userId]
+    );
+    const cartId = cartResult.rows[0].id;
+
+    const variantResult = await client.query(
+      `
+        SELECT
+          GREATEST(
+            COALESCE(i.quantity_on_hand, 0) -
+            COALESCE(i.quantity_reserved, 0),
+            0
+          ) AS "availableStock",
+          COALESCE(ci.quantity, 0) AS "currentQuantity"
+        FROM product_variants pv
+        JOIN products p ON p.id = pv.product_id
+        LEFT JOIN inventory i ON i.variant_id = pv.id
+        LEFT JOIN cart_items ci
+          ON ci.variant_id = pv.id AND ci.cart_id = $2
+        WHERE pv.id = $1
+          AND pv.is_active
+          AND p.status = 'active'
+      `,
+      [variantId, cartId]
+    );
+
+    const variant = variantResult.rows[0];
+
+    if (!variant) {
+      await client.query("ROLLBACK");
+      return { outcome: "variant_unavailable" };
+    }
+
+    const newQuantity = variant.currentQuantity + quantity;
+
+    if (newQuantity > variant.availableStock) {
+      await client.query("ROLLBACK");
+      return {
+        outcome: "insufficient_stock",
+        availableStock: variant.availableStock
+      };
+    }
+
+    const itemResult = await client.query(
+      `
+        INSERT INTO cart_items (cart_id, variant_id, quantity)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (cart_id, variant_id)
+        DO UPDATE SET
+          quantity = EXCLUDED.quantity,
+          updated_at = NOW()
+        RETURNING id, variant_id AS "variantId", quantity
+      `,
+      [cartId, variantId, newQuantity]
+    );
+
+    await client.query("COMMIT");
+    return { outcome: "added", item: itemResult.rows[0] };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
