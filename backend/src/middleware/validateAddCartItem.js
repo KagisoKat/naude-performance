@@ -35,9 +35,8 @@ export function validateAddCartItem(req, res, next) {
     next();
 }
 
-export function validateUpdateCartItem(req, res, next) {
+export function validateCartItemId(req, res, next) {
     const { itemId } = req.params;
-    const { quantity } = req.body ?? {};
 
     if (!isValidUuid(itemId)) {
         return res.status(400).json({
@@ -45,6 +44,12 @@ export function validateUpdateCartItem(req, res, next) {
             message: "itemId must be a valid UUID"
         });
     }
+
+    next();
+}
+
+export function validateUpdateCartItem(req, res, next) {
+    const { quantity } = req.body ?? {};
 
     if (!isValidQuantity(quantity)) {
         return res.status(400).json({

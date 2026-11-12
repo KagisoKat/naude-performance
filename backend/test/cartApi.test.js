@@ -375,4 +375,60 @@ describe("NAUDÉ Cart API", function () {
       "quantity must be a positive integer within the supported range"
     );
   });
+	  it("lets only the owner remove a cart item and keeps the empty cart", async function () {
+    const owner = await createCustomer();
+    const otherCustomer = await createCustomer();
+    const ownerCartId = await createCart(owner.id);
+    await createCart(otherCustomer.id);
+
+    const { rows: [product] } = await pool.query(
+      `INSERT INTO products (name, slug, category, base_price, status)
+       VALUES ('Test Leggings', $1, 'leggings', 19.99, 'archived')
+       RETURNING id`,
+      [`test-cart-delete-${randomUUID()}`]
+    );
+    productIds.push(product.id);
+
+    const { rows: [variant] } = await pool.query(
+      `INSERT INTO product_variants (product_id, sku, color, size)
+       VALUES ($1, $2, 'Black', 'M')
+       RETURNING id`,
+      [product.id, `TEST-${randomUUID()}`]
+    );
+
+    const { rows: [item] } = await pool.query(
+      `INSERT INTO cart_items (cart_id, variant_id, quantity)
+       VALUES ($1, $2, 2)
+       RETURNING id`,
+      [ownerCartId, variant.id]
+    );
+
+    const ownerAgent = await login(owner);
+    const otherAgent = await login(otherCustomer);
+    const { body: ownerToken } = await ownerAgent
+      .get("/api/auth/csrf-token")
+      .expect(200);
+    const { body: otherToken } = await otherAgent
+      .get("/api/auth/csrf-token")
+      .expect(200);
+
+    const itemPath = `/api/cart/items/${item.id}`;
+
+    await otherAgent.delete(itemPath)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", otherToken.csrfToken)
+      .expect(404);
+
+    const removed = await ownerAgent.delete(itemPath)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", ownerToken.csrfToken)
+      .expect(204);
+
+    assert.equal(removed.text, "");
+
+    await ownerAgent.get("/api/cart").expect(200, {
+      success: true,
+      cart: { id: ownerCartId, items: [], itemCount: 0, subtotal: "0.00" }
+    });
+  });
 });

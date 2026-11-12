@@ -275,3 +275,46 @@ export async function updateCartItemQuantity(userId, itemId, quantity) {
     client.release();
   }
 }
+
+export async function removeCartItem(userId, itemId) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const cartResult = await client.query(
+      `
+        SELECT id
+        FROM carts
+        WHERE user_id = $1
+        FOR UPDATE
+      `,
+      [userId]
+    );
+    const cart = cartResult.rows[0];
+
+    if (!cart) {
+      await client.query("ROLLBACK");
+      return { outcome: "item_not_found" };
+    }
+
+    const deletedResult = await client.query(
+      `
+        DELETE FROM cart_items
+        WHERE id = $1 AND cart_id = $2
+      `,
+      [itemId, cart.id]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      outcome: deletedResult.rowCount === 1 ? "removed" : "item_not_found"
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}

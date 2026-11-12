@@ -1,6 +1,7 @@
 import {
   addCartItem,
   getCartByUserId,
+  removeCartItem,
   updateCartItemQuantity
 } from "../services/cartService.js";
 
@@ -78,6 +79,24 @@ export async function updateItem(req, res, next) {
       success: true,
       item: result.item
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function removeItem(req, res, next) {
+  try {
+    const { itemId } = req.params;
+    const result = await removeCartItem(req.user.id, itemId);
+
+    if (result.outcome === "item_not_found") {
+      return res.status(404).json({
+        success: false,
+        message: "Cart item not found"
+      });
+    }
+
+    return res.status(204).end();
   } catch (error) {
     next(error);
   }
