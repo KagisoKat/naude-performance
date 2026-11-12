@@ -193,3 +193,85 @@ export async function addCartItem(userId, variantId, quantity) {
     client.release();
   }
 }
+
+export async function updateCartItemQuantity(userId, itemId, quantity) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // Use the same cart lock as addCartItem.
+    const cartResult = await client.query(
+      `
+        SELECT id
+        FROM carts
+        WHERE user_id = $1
+        FOR UPDATE
+      `,
+      [userId]
+    );
+
+    const cart = cartResult.rows[0];
+
+    if (!cart) {
+      await client.query("ROLLBACK");
+      return { outcome: "item_not_found" };
+    }
+
+    const itemResult = await client.query(
+      `
+        SELECT
+          pv.is_active AND p.status = 'active' AS "variantAvailable",
+          GREATEST(
+            COALESCE(i.quantity_on_hand, 0) -
+            COALESCE(i.quantity_reserved, 0),
+            0
+          ) AS "availableStock"
+        FROM cart_items ci
+        JOIN product_variants pv ON pv.id = ci.variant_id
+        JOIN products p ON p.id = pv.product_id
+        LEFT JOIN inventory i ON i.variant_id = pv.id
+        WHERE ci.id = $1 AND ci.cart_id = $2
+      `,
+      [itemId, cart.id]
+    );
+
+    const item = itemResult.rows[0];
+
+    if (!item) {
+      await client.query("ROLLBACK");
+      return { outcome: "item_not_found" };
+    }
+
+    if (!item.variantAvailable) {
+      await client.query("ROLLBACK");
+      return { outcome: "variant_unavailable" };
+    }
+
+    if (quantity > item.availableStock) {
+      await client.query("ROLLBACK");
+      return {
+        outcome: "insufficient_stock",
+        availableStock: item.availableStock
+      };
+    }
+
+    const updatedResult = await client.query(
+      `
+        UPDATE cart_items
+        SET quantity = $3, updated_at = NOW()
+        WHERE id = $1 AND cart_id = $2
+        RETURNING id, variant_id AS "variantId", quantity
+      `,
+      [itemId, cart.id, quantity]
+    );
+
+    await client.query("COMMIT");
+    return { outcome: "updated", item: updatedResult.rows[0] };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}

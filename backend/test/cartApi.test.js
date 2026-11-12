@@ -285,4 +285,94 @@ describe("NAUDÉ Cart API", function () {
       cart: { id: null, items: [], itemCount: 0, subtotal: "0.00" }
     });
   });
+
+  it("sets the cart quantity and rejects overstock and other customers", async function () {
+    const customer = await createCustomer();
+    const otherCustomer = await createCustomer();
+    const agent = await login(customer);
+    const otherAgent = await login(otherCustomer);
+    const { body: ownerToken } = await agent.get("/api/auth/csrf-token").expect(200);
+    const { body: otherToken } = await otherAgent.get("/api/auth/csrf-token").expect(200);
+
+    const { rows: [product] } = await pool.query(
+      `INSERT INTO products (name, slug, category, base_price, status)
+       VALUES ('Test Leggings', $1, 'leggings', 19.99, 'active')
+       RETURNING id`,
+      [`test-cart-patch-${randomUUID()}`]
+    );
+    productIds.push(product.id);
+
+    const { rows: [variant] } = await pool.query(
+      `INSERT INTO product_variants (product_id, sku, color, size)
+       VALUES ($1, $2, 'Black', 'M')
+       RETURNING id`,
+      [product.id, `TEST-${randomUUID()}`]
+    );
+
+    await pool.query(
+      `INSERT INTO inventory (variant_id, quantity_on_hand, quantity_reserved)
+       VALUES ($1, 5, 1)`,
+      [variant.id]
+    );
+
+    const cartId = await createCart(customer.id);
+    await createCart(otherCustomer.id);
+
+    const { rows: [item] } = await pool.query(
+      `INSERT INTO cart_items (cart_id, variant_id, quantity)
+       VALUES ($1, $2, 2)
+       RETURNING id`,
+      [cartId, variant.id]
+    );
+
+    const itemPath = `/api/cart/items/${item.id}`;
+
+    function setQuantity(session, csrfToken, quantity) {
+      return session.patch(itemPath)
+        .set("Origin", origin)
+        .set("X-CSRF-Token", csrfToken)
+        .send({ quantity });
+    }
+
+    const updated = await setQuantity(agent, ownerToken.csrfToken, 3).expect(200);
+    assert.equal(updated.body.item.id, item.id);
+    assert.equal(updated.body.item.quantity, 3);
+
+    const overstock = await setQuantity(agent, ownerToken.csrfToken, 5).expect(409);
+    assert.equal(overstock.body.availableStock, 4);
+
+    const otherUpdate = await setQuantity(otherAgent, otherToken.csrfToken, 1).expect(404);
+    assert.equal(otherUpdate.body.message, "Cart item not found");
+
+    const { body } = await agent.get("/api/cart").expect(200);
+    assert.equal(body.cart.items.length, 1);
+    assert.equal(body.cart.items[0].quantity, 3);
+    assert.equal(body.cart.subtotal, "59.97");
+  });
+
+  it("rejects an invalid cart item ID and quantity on PATCH", async function () {
+    const customer = await createCustomer();
+    const agent = await login(customer);
+    const { body } = await agent.get("/api/auth/csrf-token").expect(200);
+    const csrfToken = body.csrfToken;
+
+    const invalidId = await agent.patch("/api/cart/items/abc")
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrfToken)
+      .send({ quantity: 3 })
+      .expect(400);
+
+    assert.equal(invalidId.body.message, "itemId must be a valid UUID");
+
+    const invalidQuantity = await agent.patch(`/api/cart/items/${randomUUID()}`)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", csrfToken)
+      .send({ quantity: "3" })
+      .expect(400);
+
+    assert.equal(
+      invalidQuantity.body.message,
+      "quantity must be a positive integer within the supported range"
+    );
+  });
 });
