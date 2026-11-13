@@ -1,5 +1,7 @@
 import { useState } from "react";
+import ProductPicker from "./ProductPicker.jsx";
 import {
+	addCartItem,
   getCart,
   login,
   removeCartItem,
@@ -61,6 +63,24 @@ export default function App() {
     }
   }
 
+	  async function handleAddToCart(variantId) {
+    setPending(true);
+    setError("");
+
+    try {
+      await addCartItem(variantId, 1);
+      setCart(await getCart());
+    } catch (error) {
+      if (error.status === 401) {
+        setCart(null);
+        setSignedIn(false);
+      }
+      setError(error.message);
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function handleRemove(itemId) {
     setPending(true);
     setError("");
@@ -85,6 +105,7 @@ export default function App() {
 
       {cart ? (
         <section aria-label="Cart summary">
+	                          <ProductPicker onAdd={handleAddToCart} cartPending={pending} />
           {cart.items.length === 0 ? (
             <p>Your cart is empty.</p>
           ) : (

@@ -66,3 +66,30 @@ export async function removeCartItem(itemId) {
     headers: { "X-CSRF-Token": csrfToken }
   });
 }
+
+export async function getProducts() {
+  const { data } = await requestJson("/api/products");
+  return data;
+}
+
+export async function getProduct(slug) {
+  const { data } = await requestJson(
+    `/api/products/${encodeURIComponent(slug)}`
+  );
+  return data;
+}
+
+export async function addCartItem(variantId, quantity) {
+  const { csrfToken } = await requestJson("/api/auth/csrf-token");
+
+  const { item } = await requestJson("/api/cart/items", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken
+    },
+    body: JSON.stringify({ variantId, quantity })
+  });
+
+  return item;
+}
