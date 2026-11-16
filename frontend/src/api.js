@@ -98,3 +98,12 @@ export async function getCurrentUser() {
   const { data } = await requestJson("/api/auth/me");
   return data;
 }
+
+export async function logout() {
+  const { csrfToken } = await requestJson("/api/auth/csrf-token");
+
+  return requestJson("/api/auth/logout", {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken }
+  });
+}

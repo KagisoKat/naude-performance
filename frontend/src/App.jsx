@@ -5,6 +5,7 @@ import {
   getCart,
   getCurrentUser,
   login,
+  logout,
   removeCartItem,
   updateCartItemQuantity
 } from "./api.js";
@@ -116,6 +117,26 @@ export default function App() {
     }
   }
 
+	  async function handleSignOut() {
+    setPending(true);
+    setError("");
+
+    try {
+      await logout();
+      setCart(null);
+      setSignedIn(false);
+    } catch (error) {
+      if (error.status === 401) {
+        setCart(null);
+        setSignedIn(false);
+      } else {
+        setError(error.message);
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function handleRemove(itemId) {
     setPending(true);
     setError("");
@@ -162,6 +183,9 @@ export default function App() {
 
       {cart ? (
         <section aria-label="Cart summary">
+	                <button type="button" onClick={handleSignOut} disabled={pending}>
+            Sign out
+          </button>
 	                          <ProductPicker onAdd={handleAddToCart} cartPending={pending} />
           {cart.items.length === 0 ? (
             <p>Your cart is empty.</p>
