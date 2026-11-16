@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ProductPicker from "./ProductPicker.jsx";
 import {
 	addCartItem,
   getCart,
+  getCurrentUser,
   login,
   removeCartItem,
   updateCartItemQuantity
@@ -13,6 +14,40 @@ export default function App() {
   const [signedIn, setSignedIn] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [sessionError, setSessionError] = useState("");
+  const [sessionAttempt, setSessionAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreSession() {
+      try {
+        await getCurrentUser();
+        const savedCart = await getCart();
+
+        if (!cancelled) {
+          setSignedIn(true);
+          setCart(savedCart);
+        }
+      } catch (error) {
+        if (!cancelled && error.status !== 401) {
+          setSessionError(error.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
+      }
+    }
+
+    restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionAttempt]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -97,6 +132,28 @@ export default function App() {
     } finally {
       setPending(false);
     }
+  }
+
+  if (checkingSession) {
+    return <p role="status">Checking your session…</p>;
+  }
+
+  if (sessionError) {
+    return (
+      <main>
+        <p role="alert">{sessionError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setSessionError("");
+            setCheckingSession(true);
+            setSessionAttempt((attempt) => attempt + 1);
+          }}
+        >
+          Retry
+        </button>
+      </main>
+    );
   }
 
   return (

@@ -93,3 +93,8 @@ export async function addCartItem(variantId, quantity) {
 
   return item;
 }
+
+export async function getCurrentUser() {
+  const { data } = await requestJson("/api/auth/me");
+  return data;
+}
