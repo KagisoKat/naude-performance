@@ -2,20 +2,43 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://192.168.56.10:5000";
 
 async function requestJson(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    credentials: "include"
-  });
+  let response;
 
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      credentials: "include"
+    });
+  } catch {
+    throw new Error(
+      "Unable to connect to NAUDÉ. Check your connection and try again."
+    );
+  }
 
-	  if (response.status === 204) {
+  if (response.status === 204) {
     return;
   }
 
-  const data = await response.json();
+  const contentType = response.headers.get("content-type") ?? "";
 
-  if (!response.ok) {
-    const error = new Error(data.message ?? "The request failed");
+  let data;
+  let responseError;
+
+  if (contentType.includes("application/json")) {
+    try {
+      data = await response.json();
+    } catch {
+      responseError = "The server returned invalid JSON.";
+    }
+  } else {
+    responseError = `Unexpected server response (HTTP ${response.status}).`;
+  }
+
+  if (!response.ok || responseError) {
+    const error = new Error(
+      responseError ?? data?.message ?? `Request failed (HTTP ${response.status}).`
+    );
+
     error.status = response.status;
     throw error;
   }
