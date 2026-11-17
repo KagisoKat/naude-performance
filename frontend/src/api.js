@@ -107,3 +107,18 @@ export async function logout() {
     headers: { "X-CSRF-Token": csrfToken }
   });
 }
+
+export async function checkout(shippingAddress) {
+  const { csrfToken } = await requestJson("/api/auth/csrf-token");
+
+  const { order } = await requestJson("/api/checkout", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken
+    },
+    body: JSON.stringify({ shippingAddress })
+  });
+
+  return order;
+}

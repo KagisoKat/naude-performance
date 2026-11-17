@@ -1,8 +1,10 @@
+import CheckoutForm from "./CheckoutForm.jsx";
 import { useEffect, useState } from "react";
 import ProductPicker from "./ProductPicker.jsx";
 import {
-	addCartItem,
+  addCartItem,
   getCart,
+  checkout,
   getCurrentUser,
   login,
   logout,
@@ -12,6 +14,7 @@ import {
 
 export default function App() {
   const [cart, setCart] = useState(null);
+  const [order, setOrder] = useState(null);
   const [signedIn, setSignedIn] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -57,14 +60,14 @@ export default function App() {
 
     setPending(true);
     setError("");
-
+    setOrder(null);
     try {
       if (!signedIn) {
         await login(fields.get("email"), fields.get("password"));
         form.reset();
         setSignedIn(true);
       }
-
+      setOrder(null);
       setCart(await getCart());
     } catch (error) {
       if (error.status === 401) {
@@ -99,13 +102,14 @@ export default function App() {
     }
   }
 
-	  async function handleAddToCart(variantId) {
+  async function handleAddToCart(variantId) {
     setPending(true);
     setError("");
 
     try {
       await addCartItem(variantId, 1);
       setCart(await getCart());
+      setOrder(null);
     } catch (error) {
       if (error.status === 401) {
         setCart(null);
@@ -117,7 +121,52 @@ export default function App() {
     }
   }
 
-	  async function handleSignOut() {
+  async function handleCheckout(shippingAddress) {
+    if (pending) return;
+
+    setPending(true);
+    setError("");
+    setOrder(null);
+
+    try {
+      const savedOrder = await checkout(shippingAddress);
+
+      // Preserve the successful order confirmation.
+      setOrder(savedOrder);
+
+      // Update the UI immediately after successful checkout.
+      setCart((currentCart) =>
+        currentCart
+          ? {
+              ...currentCart,
+              items: [],
+              itemCount: 0,
+              subtotal: "0.00"
+            }
+          : currentCart
+      );
+
+      // Synchronize with the database.
+      try {
+        const updatedCart = await getCart();
+        setCart(updatedCart);
+      } catch {
+        setError(
+          "Your order was created successfully, but we couldn't refresh your cart."
+        );
+      }
+    } catch (error) {
+      if (error.status === 401) {
+        setCart(null);
+        setSignedIn(false);
+      }
+      setError(error.message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleSignOut() {
     setPending(true);
     setError("");
 
@@ -183,10 +232,10 @@ export default function App() {
 
       {cart ? (
         <section aria-label="Cart summary">
-	                <button type="button" onClick={handleSignOut} disabled={pending}>
+                <button type="button" onClick={handleSignOut} disabled={pending}>
             Sign out
           </button>
-	                          <ProductPicker onAdd={handleAddToCart} cartPending={pending} />
+          <ProductPicker onAdd={handleAddToCart} cartPending={pending} />
           {cart.items.length === 0 ? (
             <p>Your cart is empty.</p>
           ) : (
@@ -218,7 +267,7 @@ export default function App() {
                     </button>
                   </form>
 
-		                        <button
+                  <button
                     type="button"
                     disabled={pending}
                     onClick={() => handleRemove(item.id)}
@@ -234,6 +283,19 @@ export default function App() {
           )}
           <p>Items: {cart.itemCount}</p>
           <p>Subtotal: R{cart.subtotal}</p>
+          {cart.items.length > 0 && !order && (
+            <CheckoutForm
+              onCheckout={handleCheckout}
+              pending={pending}
+            />
+          )}
+
+          {order && (
+            <p role="status">
+              Order {order.id} created. Total R{order.total_amount}. Payment status:{" "}
+              {order.payment_status}.
+            </p>
+          )}
         </section>
       ) : (
         <form onSubmit={handleSubmit}>
