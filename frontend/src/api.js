@@ -145,3 +145,8 @@ export async function checkout(shippingAddress) {
 
   return order;
 }
+
+export async function getOrders() {
+  const { orders } = await requestJson("/api/orders");
+  return orders;
+}

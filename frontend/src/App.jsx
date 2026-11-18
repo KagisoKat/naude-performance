@@ -1,4 +1,5 @@
 import CheckoutForm from "./CheckoutForm.jsx";
+import OrderHistory from "./OrderHistory.jsx";
 import { useEffect, useState } from "react";
 import ProductPicker from "./ProductPicker.jsx";
 import {
@@ -229,6 +230,15 @@ export default function App() {
   return (
     <main>
       <h1>NAUDÉ Shopping Cart</h1>
+
+      {signedIn && (
+        <OrderHistory
+          onSessionExpired={() => {
+            setCart(null);
+            setSignedIn(false);
+          }}
+        />
+      )}
 
       {cart ? (
         <section aria-label="Cart summary">
