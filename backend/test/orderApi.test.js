@@ -28,10 +28,16 @@ describe("NAUDÉ Order API", function () {
     await request(app).get("/api/orders").expect(401);
   });
 
+  it("requires sign-in to view an individual order", async function () {
+    await request(app).get(`/api/orders/${randomUUID()}`).expect(401);
+  });
+
   it("returns only the signed-in customer's orders, newest first", async function () {
     const customerId = randomUUID();
     const otherCustomerId = randomUUID();
     const customerIds = [customerId, otherCustomerId];
+    const productId = randomUUID();
+    const variantId = randomUUID();
     const passwordHash = await argon2.hash(password);
 
     function emailFor(userId) {
@@ -80,6 +86,58 @@ describe("NAUDÉ Order API", function () {
       const olderId = await insertOrder(customerId, "499.00", "2026-01-01T10:00:00Z");
       const newerId = await insertOrder(customerId, "899.00", "2026-01-02T10:00:00Z");
       const otherId = await insertOrder(otherCustomerId, "1299.00", "2026-01-03T10:00:00Z");
+      const itemId = randomUUID();
+      const sku = `ORDER-TEST-${variantId}`;
+
+      await pool.query(
+        `INSERT INTO products (id, name, slug, category, base_price, status)
+         VALUES ($1, 'Current Catalogue Leggings', $2, 'leggings', 999.00, 'active')`,
+        [productId, `order-details-${productId}`]
+      );
+
+      await pool.query(
+        `INSERT INTO product_variants (id, product_id, sku, color, size)
+         VALUES ($1, $2, $3, 'Black', 'M')`,
+        [variantId, productId, sku]
+      );
+
+      await pool.query(
+        `INSERT INTO order_items (
+           id, order_id, variant_id, product_name, sku, color, size, quantity, unit_price
+         )
+         VALUES ($1, $2, $3, 'Original Leggings', $4, 'Black', 'M', 2, 449.50)`,
+        [itemId, newerId, variantId, sku]
+      );
+
+      const detailPath = `/api/orders/${newerId}`;
+      const detail = await customer.get(detailPath).expect(200);
+
+      assert.equal(detail.body.success, true);
+      assert.equal(detail.body.order.id, newerId);
+      assert.equal(detail.body.order.total_amount, "899.00");
+      assert.deepEqual(detail.body.order.items, [{
+        id: itemId,
+        product_name: "Original Leggings",
+        sku,
+        color: "Black",
+        size: "M",
+        quantity: 2,
+        unit_price: "449.50",
+        line_total: "899.00"
+      }]);
+
+      const missingOrder = {
+        success: false,
+        message: "Order not found"
+      };
+
+      await otherCustomer.get(detailPath).expect(404, missingOrder);
+      await customer.get(`/api/orders/${randomUUID()}`).expect(404, missingOrder);
+
+      await customer.get("/api/orders/abc").expect(400, {
+        success: false,
+        message: "Order ID must be a valid UUID"
+      });
 
       const { body } = await customer.get("/api/orders").expect(200);
 
@@ -96,7 +154,10 @@ describe("NAUDÉ Order API", function () {
       const otherResponse = await otherCustomer.get("/api/orders").expect(200);
       assert.deepEqual(otherResponse.body.orders.map((order) => order.id), [otherId]);
     } finally {
+      await pool.query("DELETE FROM order_items WHERE variant_id = $1", [variantId]);
       await pool.query("DELETE FROM orders WHERE user_id = ANY($1::uuid[])", [customerIds]);
+      await pool.query("DELETE FROM product_variants WHERE id = $1", [variantId]);
+      await pool.query("DELETE FROM products WHERE id = $1", [productId]);
       await pool.query(
         "DELETE FROM user_sessions WHERE sess->>'userId' = ANY($1::text[])",
         [customerIds]
