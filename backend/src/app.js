@@ -5,6 +5,7 @@ import cors from "cors";
 import { createSessionMiddleware } from "./config/session.js";
 import productRoutes from "./routes/productRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import { requireTrustedOrigin } from "./middleware/requireTrustedOrigin.js";
@@ -35,6 +36,7 @@ app.use("/api/auth", authRoutes);
 // Shopping cart endpoints
 app.use("/api/cart", cartRoutes);
 app.use("/api/checkout", checkoutRoutes);
+app.use("/api/orders", orderRoutes);
 // Unknown routes
 app.use((req, res) => {
     res.status(404).json({
