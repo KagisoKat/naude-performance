@@ -150,3 +150,11 @@ export async function getOrders() {
   const { orders } = await requestJson("/api/orders");
   return orders;
 }
+
+export async function getOrder(orderId) {
+  const { order } = await requestJson(
+    `/api/orders/${encodeURIComponent(orderId)}`
+  );
+
+  return order;
+}
