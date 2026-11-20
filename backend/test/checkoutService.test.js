@@ -1,6 +1,6 @@
 import argon2 from "argon2";
 import request from "supertest";
-
+import { cancelUnpaidOrder } from "../src/services/orderService.js";
 import app from "../src/app.js";import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
@@ -210,6 +210,99 @@ describe("Checkout service", function () {
         [customerIds]
       );
       assert.equal(orderCount.count, 1);
+
+    const rejectedCancellation = await cancelUnpaidOrder(
+      accepted.order.id,
+      customerIds[rejectedIndex]
+    );
+    assert.deepEqual(rejectedCancellation, {
+      outcome: "order_not_found"
+    });
+
+    const ownerId = customerIds[1 - rejectedIndex];
+
+    await pool.query(
+      "UPDATE orders SET payment_status = 'paid' WHERE id = $1",
+      [accepted.order.id]
+    );
+
+    const paidCancellation = await cancelUnpaidOrder(
+      accepted.order.id,
+      ownerId
+    );
+    assert.deepEqual(paidCancellation, { outcome: "cannot_cancel" });
+
+    const { rows: [paidStock] } = await pool.query(
+      "SELECT quantity_reserved FROM inventory WHERE variant_id = $1",
+      [variantId]
+    );
+    assert.equal(paidStock.quantity_reserved, 2);
+
+    await pool.query(
+      "UPDATE orders SET payment_status = 'unpaid' WHERE id = $1",
+      [accepted.order.id]
+    );
+
+    await pool.query(
+      "UPDATE inventory SET quantity_reserved = 1 WHERE variant_id = $1",
+      [variantId]
+    );
+
+    await assert.rejects(
+      () => cancelUnpaidOrder(accepted.order.id, ownerId),
+      { message: `Reservation mismatch for order ${accepted.order.id}` }
+    );
+
+    const { rows: [unchangedOrder] } = await pool.query(
+      "SELECT status FROM orders WHERE id = $1",
+      [accepted.order.id]
+    );
+    assert.equal(unchangedOrder.status, "pending");
+
+    const { rows: [unchangedStock] } = await pool.query(
+      "SELECT quantity_reserved FROM inventory WHERE variant_id = $1",
+      [variantId]
+    );
+    assert.equal(unchangedStock.quantity_reserved, 1);
+
+    await pool.query(
+      "UPDATE inventory SET quantity_reserved = 2 WHERE variant_id = $1",
+      [variantId]
+    );
+
+    const cancellations = await Promise.all([
+      cancelUnpaidOrder(accepted.order.id, ownerId),
+      cancelUnpaidOrder(accepted.order.id, ownerId)
+    ]);
+
+    for (const result of cancellations) {
+      assert.equal(result.outcome, "cancelled");
+      assert.equal(result.order.status, "cancelled");
+      assert.equal(result.order.payment_status, "unpaid");
+    }
+
+    const { rows: [releasedStock] } = await pool.query(
+      `SELECT quantity_on_hand, quantity_reserved
+       FROM inventory WHERE variant_id = $1`,
+      [variantId]
+    );
+
+    assert.deepEqual(releasedStock, {
+      quantity_on_hand: 3,
+      quantity_reserved: 0
+    });
+
+    const { rows: [savedOrder] } = await pool.query(
+      "SELECT status FROM orders WHERE id = $1",
+      [accepted.order.id]
+    );
+    assert.equal(savedOrder.status, "cancelled");
+
+    const { rows: [savedLines] } = await pool.query(
+      "SELECT count(*)::int AS count FROM order_items WHERE order_id = $1",
+      [accepted.order.id]
+    );
+    assert.equal(savedLines.count, 1);
     } finally {
       await pool.query(
         `DELETE FROM order_items

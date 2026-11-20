@@ -53,3 +53,102 @@ export async function getOrderByIdForUser(orderId, userId) {
 
   return order ?? null;
 }
+export async function cancelUnpaidOrder(orderId, userId) {
+  const client = await pool.connect();
+  let committed = false;
+
+  try {
+    await client.query("BEGIN");
+
+    const { rows: [order] } = await client.query(
+      `
+        SELECT id, status, payment_status
+        FROM orders
+        WHERE id = $1 AND user_id = $2
+        FOR UPDATE
+      `,
+      [orderId, userId]
+    );
+
+    if (!order) {
+      return { outcome: "order_not_found" };
+    }
+
+    if (order.status === "cancelled") {
+      return { outcome: "cancelled", order };
+    }
+
+    if (order.status !== "pending" || order.payment_status !== "unpaid") {
+      return { outcome: "cannot_cancel" };
+    }
+
+    const { rows: items } = await client.query(
+      `
+        SELECT variant_id, quantity
+        FROM order_items
+        WHERE order_id = $1
+        ORDER BY variant_id
+      `,
+      [order.id]
+    );
+
+    const variantIds = items.map((item) => item.variant_id);
+    const { rows: inventory } = await client.query(
+      `
+        SELECT variant_id, quantity_reserved
+        FROM inventory
+        WHERE variant_id = ANY($1::uuid[])
+        ORDER BY variant_id
+        FOR UPDATE
+      `,
+      [variantIds]
+    );
+
+    const reservedByVariant = new Map(
+      inventory.map((row) => [row.variant_id, row.quantity_reserved])
+    );
+
+    for (const item of items) {
+      const reserved = reservedByVariant.get(item.variant_id);
+
+      if (reserved === undefined || reserved < item.quantity) {
+        throw new Error(`Reservation mismatch for order ${order.id}`);
+      }
+    }
+
+    for (const item of items) {
+      await client.query(
+        `
+          UPDATE inventory
+          SET quantity_reserved = quantity_reserved - $2,
+              updated_at = NOW()
+          WHERE variant_id = $1
+        `,
+        [item.variant_id, item.quantity]
+      );
+    }
+
+    const { rows: [cancelledOrder] } = await client.query(
+      `
+        UPDATE orders
+        SET status = 'cancelled', updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, status, payment_status
+      `,
+      [order.id]
+    );
+
+    await client.query("COMMIT");
+    committed = true;
+
+    return { outcome: "cancelled", order: cancelledOrder };
+  } finally {
+    try {
+      if (!committed) {
+        await client.query("ROLLBACK");
+      }
+    } finally {
+      client.release();
+    }
+  }
+}

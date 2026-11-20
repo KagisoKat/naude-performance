@@ -153,9 +153,79 @@ describe("NAUDÉ Order API", function () {
 
       const otherResponse = await otherCustomer.get("/api/orders").expect(200);
       assert.deepEqual(otherResponse.body.orders.map((order) => order.id), [otherId]);
+
+    await pool.query(
+      `INSERT INTO inventory (
+         variant_id, quantity_on_hand, quantity_reserved
+       )
+       VALUES ($1, 5, 2)`,
+      [variantId]
+    );
+
+    const cancelPath = `/api/orders/${newerId}/cancel`;
+
+    await request(app).post(cancelPath)
+      .set("Origin", origin)
+      .expect(401);
+
+    await customer.post(cancelPath)
+      .set("Origin", origin)
+      .expect(403);
+
+    const { body: ownerToken } = await customer
+      .get("/api/auth/csrf-token")
+      .expect(200);
+
+    const { body: otherToken } = await otherCustomer
+      .get("/api/auth/csrf-token")
+      .expect(200);
+
+    await otherCustomer.post(cancelPath)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", otherToken.csrfToken)
+      .expect(404, {
+        success: false,
+        message: "Order not found"
+      });
+
+    await customer.post("/api/orders/abc/cancel")
+      .set("Origin", origin)
+      .set("X-CSRF-Token", ownerToken.csrfToken)
+      .expect(400);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const cancelled = await customer.post(cancelPath)
+        .set("Origin", origin)
+        .set("X-CSRF-Token", ownerToken.csrfToken)
+        .expect(200);
+
+      assert.equal(cancelled.body.success, true);
+      assert.equal(cancelled.body.order.id, newerId);
+      assert.equal(cancelled.body.order.status, "cancelled");
+      assert.equal(cancelled.body.order.payment_status, "unpaid");
+    }
+
+    const { rows: [releasedStock] } = await pool.query(
+      `SELECT quantity_on_hand, quantity_reserved
+       FROM inventory WHERE variant_id = $1`,
+      [variantId]
+    );
+
+    assert.deepEqual(releasedStock, {
+      quantity_on_hand: 5,
+      quantity_reserved: 0
+    });
+
+    const cancelledDetail = await customer
+      .get(`/api/orders/${newerId}`)
+      .expect(200);
+
+    assert.equal(cancelledDetail.body.order.status, "cancelled");
+    assert.equal(cancelledDetail.body.order.items.length, 1);
     } finally {
       await pool.query("DELETE FROM order_items WHERE variant_id = $1", [variantId]);
       await pool.query("DELETE FROM orders WHERE user_id = ANY($1::uuid[])", [customerIds]);
+      await pool.query("DELETE FROM inventory WHERE variant_id = $1", [variantId]);
       await pool.query("DELETE FROM product_variants WHERE id = $1", [variantId]);
       await pool.query("DELETE FROM products WHERE id = $1", [productId]);
       await pool.query(
