@@ -1,6 +1,13 @@
 import pool from "../config/db.js";
 
 export async function checkoutCart(userId, shippingAddress) {
+	  const reservationMinutes = Number(
+    process.env.ORDER_RESERVATION_MINUTES ?? "30"
+  );
+
+  if (!Number.isInteger(reservationMinutes) || reservationMinutes < 1) {
+    throw new Error("ORDER_RESERVATION_MINUTES must be a positive integer");
+  }
 	  let committed = false;
   const client = await pool.connect();
 
@@ -88,15 +95,28 @@ export async function checkoutCart(userId, shippingAddress) {
 
     const { rows: [order] } = await client.query(
       `
-        INSERT INTO orders (user_id, subtotal, shipping_amount, shipping_address)
-        SELECT $1, SUM(line.quantity * line."unitPrice"), 0, $2::jsonb
+              INSERT INTO orders (
+          user_id, subtotal, shipping_amount, shipping_address,
+          reservation_expires_at
+        )
+        SELECT
+          $1,
+          SUM(line.quantity * line."unitPrice"),
+          0,
+          $2::jsonb,
+          NOW() + ($4::integer * INTERVAL '1 minute')
         FROM jsonb_to_recordset($3::jsonb) AS line(
+          "variantId" uuid,
+          "productName" text,
+          sku text,
+          color text,
+          size text,
           quantity integer,
           "unitPrice" numeric
         )
         RETURNING id, status, payment_status, subtotal, shipping_amount, total_amount
       `,
-      [userId, JSON.stringify(shippingAddress), orderItems]
+	[userId, JSON.stringify(shippingAddress), orderItems, reservationMinutes]
     );
 
     await client.query(

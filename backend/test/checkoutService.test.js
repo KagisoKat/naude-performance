@@ -164,6 +164,21 @@ describe("Checkout service", function () {
       assert.equal(accepted.order.subtotal, "1598.00");
       assert.equal(accepted.order.total_amount, "1598.00");
 
+    const { rows: [reservation] } = await pool.query(
+      `SELECT
+         EXTRACT(EPOCH FROM (reservation_expires_at - created_at))::integer
+           AS lifetime_seconds
+       FROM orders
+       WHERE id = $1`,
+      [accepted.order.id]
+    );
+
+    const expectedMinutes = Number(
+      process.env.ORDER_RESERVATION_MINUTES ?? "30"
+    );
+
+    assert.equal(reservation.lifetime_seconds, expectedMinutes * 60);
+
       const { rows: orderLines } = await pool.query(
         `SELECT product_name, quantity, unit_price, line_total
          FROM order_items WHERE order_id = $1`,
@@ -270,9 +285,36 @@ describe("Checkout service", function () {
       [variantId]
     );
 
-    const cancellations = await Promise.all([
-      cancelUnpaidOrder(accepted.order.id, ownerId),
-      cancelUnpaidOrder(accepted.order.id, ownerId)
+	        await pool.query(
+      `UPDATE orders
+       SET reservation_expires_at = NOW() + INTERVAL '1 hour'
+       WHERE id = $1`,
+      [accepted.order.id]
+    );
+
+    const futureExpiry = await cancelUnpaidOrder(
+      accepted.order.id,
+      ownerId,
+      true
+    );
+    assert.deepEqual(futureExpiry, { outcome: "not_expired" });
+
+    const { rows: [futureStock] } = await pool.query(
+      "SELECT quantity_reserved FROM inventory WHERE variant_id = $1",
+      [variantId]
+    );
+    assert.equal(futureStock.quantity_reserved, 2);
+
+    await pool.query(
+      `UPDATE orders
+       SET reservation_expires_at = NOW() - INTERVAL '1 minute'
+       WHERE id = $1`,
+      [accepted.order.id]
+    );
+
+      const cancellations = await Promise.all([
+      cancelUnpaidOrder(accepted.order.id, ownerId, true),
+      cancelUnpaidOrder(accepted.order.id, ownerId, true)
     ]);
 
     for (const result of cancellations) {

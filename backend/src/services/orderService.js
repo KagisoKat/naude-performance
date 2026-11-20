@@ -53,7 +53,7 @@ export async function getOrderByIdForUser(orderId, userId) {
 
   return order ?? null;
 }
-export async function cancelUnpaidOrder(orderId, userId) {
+export async function cancelUnpaidOrder(orderId, userId, onlyIfExpired = false) {
   const client = await pool.connect();
   let committed = false;
 
@@ -62,7 +62,11 @@ export async function cancelUnpaidOrder(orderId, userId) {
 
     const { rows: [order] } = await client.query(
       `
-        SELECT id, status, payment_status
+	        SELECT
+          id,
+          status,
+          payment_status,
+          reservation_expires_at <= NOW() AS reservation_expired
         FROM orders
         WHERE id = $1 AND user_id = $2
         FOR UPDATE
@@ -82,6 +86,9 @@ export async function cancelUnpaidOrder(orderId, userId) {
       return { outcome: "cannot_cancel" };
     }
 
+    if (onlyIfExpired && order.reservation_expired !== true) {
+      return { outcome: "not_expired" };
+    }
     const { rows: items } = await client.query(
       `
         SELECT variant_id, quantity

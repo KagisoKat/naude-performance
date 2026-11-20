@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/5 * * * * /usr/bin/flock -n /home/vagrant/.cache/naude-order-expiry.lock /usr/bin/bash /home/vagrant/naude/scripts/expire-orders.sh naude >> /home/vagrant/naude-logs/order-expiry.log 2>&1
