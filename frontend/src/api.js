@@ -158,3 +158,17 @@ export async function getOrder(orderId) {
 
   return order;
 }
+
+export async function cancelOrder(orderId) {
+  const { csrfToken } = await requestJson("/api/auth/csrf-token");
+
+  const { order } = await requestJson(
+    `/api/orders/${encodeURIComponent(orderId)}/cancel`,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken }
+    }
+  );
+
+  return order;
+}

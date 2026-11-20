@@ -1,11 +1,39 @@
 import { useState } from "react";
-import { getOrder, getOrders } from "./api.js";
-
+import { cancelOrder, getOrder, getOrders } from "./api.js";
 export default function OrderHistory({ onSessionExpired }) {
   const [orders, setOrders] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+
+	  async function handleCancelOrder(orderId) {
+    if (!window.confirm("Cancel this unpaid order?")) {
+      return;
+    }
+
+    setPending(true);
+    setError("");
+
+    try {
+      const cancelledOrder = await cancelOrder(orderId);
+
+      setOrders((currentOrders) =>
+        currentOrders.map((order) =>
+          order.id === orderId ? { ...order, ...cancelledOrder } : order
+        )
+      );
+      setSelectedOrder(null);
+    } catch (error) {
+      if (error.status === 401) {
+        onSessionExpired();
+        return;
+      }
+
+      setError(error.message);
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function toggleOrderDetails(orderId) {
     setError("");
@@ -79,6 +107,15 @@ export default function OrderHistory({ onSessionExpired }) {
               <p>Order status: {order.status}</p>
               <p>Payment status: {order.payment_status}</p>
               <p>Total: R{order.total_amount}</p>
+		                {order.status === "pending" && order.payment_status === "unpaid" && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => handleCancelOrder(order.id)}
+                >
+                  Cancel order
+                </button>
+              )}
               <button
                 type="button"
                 disabled={pending}
