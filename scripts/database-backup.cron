@@ -1,0 +1,1 @@
+*/15 * * * * PATH=/usr/bin:/bin /usr/bin/flock -n /home/vagrant/.cache/naude-backup-schedule.lock /usr/bin/bash /home/vagrant/naude/scripts/backup-if-due.sh naude >> /home/vagrant/naude-logs/database-backups.log 2>&1 # NAUDE_DATABASE_BACKUP
