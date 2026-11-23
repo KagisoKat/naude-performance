@@ -1,0 +1,23 @@
+name: Script checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bash-checks:
+    name: Bash syntax and backup-health tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check Bash scripts and run tests
+        run: bash scripts/check-scripts.sh
