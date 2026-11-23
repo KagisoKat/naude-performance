@@ -1,0 +1,1 @@
+*/15 * * * * PATH=/usr/bin:/bin /usr/bin/flock -n /home/vagrant/.cache/naude-backup-health.lock /usr/bin/bash /home/vagrant/naude/scripts/run-backup-health.sh naude >> /home/vagrant/naude-logs/backup-health.log 2>&1 # NAUDE_BACKUP_HEALTH
